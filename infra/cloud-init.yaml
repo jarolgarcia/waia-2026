@@ -1,0 +1,24 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - docker.io
+  - docker-compose-plugin
+  - unattended-upgrades
+users:
+  - name: __ADMIN_USERNAME__
+    groups: [docker]
+    shell: /bin/bash
+    lock_passwd: true
+runcmd:
+  - systemctl enable --now docker
+  - systemctl enable --now unattended-upgrades
+  - install -d -o __ADMIN_USERNAME__ -g __ADMIN_USERNAME__ -m 0750 /opt/waia
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable

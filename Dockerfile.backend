@@ -1,0 +1,10 @@
+FROM php:8.3-fpm-alpine
+RUN docker-php-ext-install pdo_mysql \
+    && mkdir -p /var/www/html/backend/uploads/experiences \
+    && chown -R www-data:www-data /var/www/html/backend
+WORKDIR /var/www/html
+COPY --chown=www-data:www-data backend /var/www/html/backend
+COPY docker/php/www.conf /usr/local/etc/php-fpm.d/zz-waia.conf
+USER www-data
+EXPOSE 9000
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD php -r 'exit(extension_loaded("pdo_mysql") ? 0 : 1);'

@@ -1,0 +1,114 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: waia_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: waia
+      MYSQL_USER: waia_app
+      MYSQL_PASSWORD: waia_app_password
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/schema/waia_database.sql:/docker-entrypoint-initdb.d/001-waia.sql:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: waia_api
+    restart: unless-stopped
+    environment:
+      APP_ENV: development
+      APP_DEBUG: "true"
+      APP_SECRET: docker-development-only-change-me
+      API_BASE_URL: http://localhost:8080/api
+      CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+      COOKIE_SECURE: "false"
+      COOKIE_SAMESITE: Lax
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: waia
+      DB_USER: waia_app
+      DB_PASSWORD: waia_app_password
+      UPLOAD_DIR: /var/www/html/backend/uploads/experiences
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/var/www/html/backend
+      - uploads_data:/var/www/html/backend/uploads/experiences
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'new PDO(\"mysql:host=\" . getenv(\"DB_HOST\") . \";port=\" . getenv(\"DB_PORT\") . \";dbname=\" . getenv(\"DB_NAME\"), getenv(\"DB_USER\"), getenv(\"DB_PASSWORD\"));'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.dev
+    container_name: waia_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: /api
+      VITE_USE_API: "true"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    networks:
+      - public
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:5173/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    container_name: waia_web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    volumes:
+      - ./docker/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - uploads_data:/var/www/html/backend/uploads:ro
+    networks:
+      - public
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+networks:
+  public:
+  internal:
+    internal: true
+
+volumes:
+  db_data:
+  node_modules:
+  uploads_data:
